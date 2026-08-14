@@ -156,10 +156,10 @@
                         <h3 class="text-xs font-bold text-white mb-2"><i class="fa-solid fa-plus-circle mr-1 text-pink-400"></i> 新規曲登録</h3>
                         <form id="add-song-form" class="space-y-3">
                             <div class="relative">
-                                <input type="text" id="input-title" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500 placeholder-slate-500" placeholder="曲名 (入力で自動検索)">
+                                <input type="text" id="input-title" required autocomplete="off" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500 placeholder-slate-500" placeholder="曲名 (入力で自動検索)">
                                 <ul id="autocomplete-list" class="autocomplete-dropdown"></ul>
                             </div>
-                            <input type="text" id="input-artist" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500 placeholder-slate-500" placeholder="アーティスト名">
+                            <input type="text" id="input-artist" required autocomplete="off" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500 placeholder-slate-500" placeholder="アーティスト名">
                             <div class="flex gap-2">
                                 <input type="text" id="input-category" class="w-1/2 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500 placeholder-slate-500" placeholder="カテゴリ (任意)">
                                 <input type="text" id="input-tags" class="w-1/2 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500 placeholder-slate-500" placeholder="タグ (任意)">
@@ -223,7 +223,7 @@
             measurementId: "G-L5HLRS15Q1"
         };
 
-        // Firebase初期化（変数名を fbApp に変更して競合を解消）
+        // Firebase初期化
         const fbApp = firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
@@ -328,11 +328,15 @@
                 this.dom.importBtn.addEventListener('click', () => this.handleCSVImport());
                 
                 this.dom.inputTitle.addEventListener('input', (e) => this.handleAutocomplete(e.target.value));
-                document.addEventListener('click', (e) => {
-                    if (e.target !== this.dom.inputTitle && e.target !== this.dom.autocompleteList) {
+                
+                // iOSのタップ問題対応（画面外を触ったらサジェストを閉じる）
+                const closeAutocomplete = (e) => {
+                    if (e.target !== this.dom.inputTitle && !this.dom.autocompleteList.contains(e.target)) {
                         this.dom.autocompleteList.style.display = 'none';
                     }
-                });
+                };
+                document.addEventListener('click', closeAutocomplete);
+                document.addEventListener('touchstart', closeAutocomplete, {passive: true});
 
                 this.dom.searchKeyword.addEventListener('input', () => this.render());
                 this.dom.filterCategory.addEventListener('change', () => this.render());
@@ -403,35 +407,50 @@
                 this.render();
             }
 
+            // 【重要変更】JSONP方式でCORSとiOSの制限を回避する
             handleAutocomplete(keyword) {
                 clearTimeout(this.searchTimeout);
                 if (!keyword.trim()) {
                     this.dom.autocompleteList.style.display = 'none';
                     return;
                 }
-                this.searchTimeout = setTimeout(async () => {
-                    try {
-                        const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(keyword)}&media=music&entity=song&lang=ja_jp&country=JP&limit=5`);
-                        if (!res.ok) throw new Error('API Error');
-                        const data = await res.json();
-                        
+                
+                this.searchTimeout = setTimeout(() => {
+                    const script = document.createElement('script');
+                    const callbackName = 'itunesCallback_' + Date.now();
+                    
+                    window[callbackName] = (data) => {
                         this.dom.autocompleteList.innerHTML = '';
-                        if (data.results.length > 0) {
+                        if (data && data.results && data.results.length > 0) {
                             data.results.forEach(song => {
                                 const li = document.createElement('li');
                                 li.innerHTML = `<div class="font-bold text-sm truncate">${song.trackName}</div><div class="text-[10px] text-slate-400 truncate">${song.artistName}</div>`;
-                                li.addEventListener('click', () => {
+                                
+                                // iOSのタップ判定ズレを防ぐため、preventDefaultでblurを回避
+                                const onSelect = (e) => {
+                                    e.preventDefault();
                                     this.dom.inputTitle.value = song.trackName;
                                     this.dom.inputArtist.value = song.artistName;
                                     this.dom.autocompleteList.style.display = 'none';
-                                });
+                                };
+                                
+                                li.addEventListener('mousedown', onSelect);
+                                li.addEventListener('touchstart', onSelect, {passive: false});
+                                li.addEventListener('click', onSelect);
+                                
                                 this.dom.autocompleteList.appendChild(li);
                             });
                             this.dom.autocompleteList.style.display = 'block';
                         } else {
                             this.dom.autocompleteList.style.display = 'none';
                         }
-                    } catch (err) {}
+                        
+                        delete window[callbackName];
+                        document.body.removeChild(script);
+                    };
+
+                    script.src = `https://itunes.apple.com/search?term=${encodeURIComponent(keyword)}&media=music&entity=song&lang=ja_jp&country=JP&limit=5&callback=${callbackName}`;
+                    document.body.appendChild(script);
                 }, 400);
             }
 
@@ -544,6 +563,7 @@
                 }
             }
 
+            // 非同期タイミングのズレによる表示バグを修正したいいね処理
             async toggleLike(id) {
                 const likedIndex = this.myActions.likes.indexOf(id);
                 const songRef = db.collection("songs").doc(id);
@@ -558,13 +578,13 @@
                         this.saveMyActions();
                         await songRef.update({ likes: firebase.firestore.FieldValue.increment(-1) });
                     }
-                    this.render();
+                    this.render(); // クリックした瞬間に画面を更新
                 } catch(error) {
                     console.error("いいねエラー:", error);
-                    alert("いいねの反映に失敗しました。");
                 }
             }
 
+            // 非同期タイミングのズレによる表示バグを修正したリクエスト処理
             async toggleRequest(id) {
                 const reqIndex = this.myActions.requests.indexOf(id);
                 const songRef = db.collection("songs").doc(id);
@@ -579,10 +599,9 @@
                         this.saveMyActions();
                         await songRef.update({ requestCount: firebase.firestore.FieldValue.increment(-1) });
                     }
-                    this.render();
+                    this.render(); // クリックした瞬間に画面を更新
                 } catch(error) {
                     console.error("リクエストエラー:", error);
-                    alert("リクエストの反映に失敗しました。");
                 }
             }
 
