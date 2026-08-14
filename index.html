@@ -47,6 +47,15 @@
         
         .active-scale:active { transform: scale(0.95); }
 
+        /* モーダルのフェードインアニメーション */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.95) translateY(10px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.2s ease-out forwards;
+        }
+
         [v-cloak] { display: none; }
     </style>
 </head>
@@ -111,7 +120,6 @@
                     <i class="fa-solid fa-chart-pie mr-2 text-cyan-400"></i> ダッシュボード
                 </h3>
                 
-                <!-- 2列×2行のグリッドレイアウトで4項目表示 -->
                 <div class="grid grid-cols-2 gap-2 mb-3">
                     <div class="bg-slate-900/50 rounded-xl p-2 border border-slate-700/50 text-center flex flex-col justify-center">
                         <div class="text-[9px] text-slate-400 mb-0.5 font-bold">登録曲数</div>
@@ -127,7 +135,6 @@
                         <div class="text-[9px] text-orange-300/80 mb-0.5 font-bold relative z-10">総リクエスト</div>
                         <div class="text-lg font-black text-orange-400 relative z-10" id="dash-requested">0</div>
                     </div>
-                    <!-- 追加: 総再生(聴く)回数 -->
                     <div class="bg-slate-900/50 rounded-xl p-2 border border-red-500/30 text-center relative overflow-hidden flex flex-col justify-center shadow-[0_0_10px_rgba(239,68,68,0.1)]">
                         <div class="absolute -top-4 -right-4 w-12 h-12 bg-red-500/20 rounded-full blur-md"></div>
                         <div class="text-[9px] text-red-300/80 mb-0.5 font-bold relative z-10">総再生(聴く)</div>
@@ -151,7 +158,6 @@
                     </div>
                     <div id="dash-expand-container" class="border-t border-slate-700/50 p-1.5 text-center hidden bg-slate-800/30">
                         <button id="dash-expand-btn" class="active-scale text-[10px] text-cyan-400 hover:text-cyan-300 font-bold py-1 px-3 rounded-full transition w-full flex justify-center items-center">
-                            <!-- JSでテキストとアイコンを切り替え -->
                         </button>
                     </div>
                 </div>
@@ -205,6 +211,34 @@
 
     </main>
 
+    <!-- 編集用モーダル -->
+    <div id="edit-modal" class="fixed inset-0 bg-black/80 z-[100] hidden flex-col justify-center items-center p-4 backdrop-blur-md">
+        <div class="w-full max-w-sm bg-slate-800 rounded-2xl p-5 border border-slate-700 shadow-2xl relative animate-fade-in">
+            <h3 class="text-base font-bold text-white mb-4 flex items-center">
+                <i class="fa-solid fa-pen text-blue-400 mr-2"></i>曲情報の編集
+            </h3>
+            <form id="edit-form" class="space-y-4">
+                <input type="hidden" id="edit-song-id">
+                <div>
+                    <label class="block text-[10px] font-medium text-slate-400 mb-1">曲名 / アーティスト (※変更不可)</label>
+                    <div id="edit-song-name" class="text-xs text-slate-200 font-bold bg-slate-900/50 p-2.5 rounded-xl border border-slate-700/50"></div>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-medium text-slate-400 mb-1">カテゴリー</label>
+                    <input type="text" id="edit-category" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 placeholder-slate-500">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-medium text-slate-400 mb-1">タグ (スペース区切り)</label>
+                    <input type="text" id="edit-tags" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 placeholder-slate-500">
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" id="edit-cancel-btn" class="active-scale px-4 py-2 rounded-xl text-xs font-bold bg-slate-700 text-white hover:bg-slate-600 transition">キャンセル</button>
+                    <button type="submit" class="active-scale px-4 py-2 rounded-xl text-xs font-bold bg-blue-500 text-white hover:bg-blue-600 transition shadow-lg shadow-blue-500/30">保存する</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         class SongListApp {
             constructor() {
@@ -228,7 +262,7 @@
                     dashTotalSongs: document.getElementById('dash-total-songs'),
                     dashTotalLikes: document.getElementById('dash-total-likes'),
                     dashRequested: document.getElementById('dash-requested'),
-                    dashTotalListens: document.getElementById('dash-total-listens'), // 追加
+                    dashTotalListens: document.getElementById('dash-total-listens'),
                     dashTableHeader: document.getElementById('dash-table-header'),
                     dashTableBody: document.getElementById('dash-table-body'),
                     dashExpandContainer: document.getElementById('dash-expand-container'),
@@ -247,7 +281,16 @@
                     filterCategory: document.getElementById('filter-category'),
                     sortType: document.getElementById('sort-type'),
                     songList: document.getElementById('song-list'),
-                    songCount: document.getElementById('song-count')
+                    songCount: document.getElementById('song-count'),
+                    
+                    // 編集モーダル用
+                    editModal: document.getElementById('edit-modal'),
+                    editForm: document.getElementById('edit-form'),
+                    editSongId: document.getElementById('edit-song-id'),
+                    editSongName: document.getElementById('edit-song-name'),
+                    editCategory: document.getElementById('edit-category'),
+                    editTags: document.getElementById('edit-tags'),
+                    editCancelBtn: document.getElementById('edit-cancel-btn')
                 };
 
                 this.init();
@@ -270,7 +313,7 @@
                             delete song.isRequested;
                         }
                         if (typeof song.requestCount === 'undefined') song.requestCount = 0;
-                        if (typeof song.listenCount === 'undefined') song.listenCount = 0; // 追加
+                        if (typeof song.listenCount === 'undefined') song.listenCount = 0;
                     });
                 } else {
                     const time = Date.now();
@@ -319,11 +362,16 @@
                     this.isDashExpanded = !this.isDashExpanded;
                     this.renderDashboard();
                 });
+
+                // 編集モーダル関連
+                this.dom.editForm.addEventListener('submit', (e) => this.handleEditSong(e));
+                this.dom.editCancelBtn.addEventListener('click', () => this.closeEditModal());
+                this.dom.editModal.addEventListener('click', (e) => {
+                    if (e.target === this.dom.editModal) this.closeEditModal();
+                });
             }
 
-            // YouTubeの検索結果を別ウィンドウで開きつつ、再生数をカウントする
             openYouTubeSearch(id, title, artist) {
-                // 先に window.open を呼ばないとポップアップブロッカーに引っかかることがある
                 const query = `${title} ${artist}`;
                 const ytSearchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
                 const width = 450;
@@ -332,12 +380,11 @@
                 const top = window.screenY + (window.outerHeight - height) / 2;
                 window.open(ytSearchUrl, 'ytPopup', `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,resizable=yes`);
 
-                // 再生回数のカウントアップ
                 const song = this.songs.find(s => s.id === id);
                 if (song) {
                     song.listenCount = (song.listenCount || 0) + 1;
                     this.saveData();
-                    this.renderDashboard(); // ダッシュボードの数値を更新
+                    this.renderDashboard();
                 }
             }
 
@@ -469,6 +516,40 @@
                 }
             }
 
+            // 編集モーダルを開く
+            openEditModal(id) {
+                const song = this.songs.find(s => s.id === id);
+                if (!song) return;
+
+                this.dom.editSongId.value = song.id;
+                this.dom.editSongName.textContent = `${song.title} / ${song.artist}`;
+                this.dom.editCategory.value = song.category === "未分類" ? "" : song.category;
+                this.dom.editTags.value = song.tags.join(' ');
+
+                this.dom.editModal.classList.remove('hidden');
+                this.dom.editModal.classList.add('flex');
+            }
+
+            // 編集モーダルを閉じる
+            closeEditModal() {
+                this.dom.editModal.classList.add('hidden');
+                this.dom.editModal.classList.remove('flex');
+            }
+
+            // 編集の保存処理
+            handleEditSong(e) {
+                e.preventDefault();
+                const id = this.dom.editSongId.value;
+                const song = this.songs.find(s => s.id === id);
+                if (song) {
+                    song.category = this.dom.editCategory.value.trim() || "未分類";
+                    song.tags = this.dom.editTags.value.split(' ').map(t => t.trim()).filter(t => t);
+                    this.saveData();
+                    this.render();
+                }
+                this.closeEditModal();
+            }
+
             toggleLike(id) {
                 const song = this.songs.find(s => s.id === id);
                 if (!song) return;
@@ -533,12 +614,12 @@
                 const totalSongs = this.songs.length;
                 const totalLikes = this.songs.reduce((sum, song) => sum + song.likes, 0);
                 const totalRequests = this.songs.reduce((sum, song) => sum + (song.requestCount || 0), 0);
-                const totalListens = this.songs.reduce((sum, song) => sum + (song.listenCount || 0), 0); // 追加
+                const totalListens = this.songs.reduce((sum, song) => sum + (song.listenCount || 0), 0);
 
                 this.dom.dashTotalSongs.textContent = totalSongs;
                 this.dom.dashTotalLikes.textContent = totalLikes;
                 this.dom.dashRequested.textContent = totalRequests;
-                this.dom.dashTotalListens.textContent = totalListens; // 追加
+                this.dom.dashTotalListens.textContent = totalListens;
 
                 const getSortIcon = (key) => {
                     if (this.dashSort.key !== key) return '<i class="fa-solid fa-sort ml-1 text-slate-600 opacity-50"></i>';
@@ -547,7 +628,6 @@
                         : '<i class="fa-solid fa-sort-up ml-1 text-cyan-400"></i>';
                 };
 
-                // ヘッダーに「再生」列を追加
                 this.dom.dashTableHeader.innerHTML = `
                     <th class="px-2 py-2 font-semibold text-left">曲名 / アーティスト</th>
                     <th class="px-1 py-2 font-semibold text-center cursor-pointer hover:bg-slate-700/50 transition duration-200" onclick="app.handleDashSort('requestCount')">
@@ -577,7 +657,6 @@
                         return this.dashSort.order === 'desc' ? valB - valA : valA - valB;
                     }
                     
-                    // 値が同じ場合はリクエスト数でサブソート
                     const subValA = (a.requestCount || 0);
                     const subValB = (b.requestCount || 0);
                     return subValB - subValA;
@@ -680,7 +759,10 @@
                         : '';
 
                     const tagsHtml = song.tags.map(t => `<span class="bg-slate-700/80 text-cyan-300 border border-cyan-500/20 px-1.5 py-0.5 rounded text-[9px] font-bold backdrop-blur-sm whitespace-nowrap">#${t}</span>`).join('');
-                    const deleteBtnHtml = this.isAdmin ? `<button onclick="app.deleteSong('${song.id}')" class="active-scale text-slate-500 hover:text-red-400 bg-slate-900/50 w-6 h-6 rounded-full flex items-center justify-center transition shrink-0 ml-2"><i class="fa-solid fa-trash text-[10px]"></i></button>` : '';
+                    
+                    // 削除ボタンに加えて、編集（ペン）ボタンを追加
+                    const editBtnHtml = this.isAdmin ? `<button onclick="app.openEditModal('${song.id}')" class="active-scale text-slate-500 hover:text-blue-400 bg-slate-900/50 w-6 h-6 rounded-full flex items-center justify-center transition shrink-0 ml-1"><i class="fa-solid fa-pen text-[10px]"></i></button>` : '';
+                    const deleteBtnHtml = this.isAdmin ? `<button onclick="app.deleteSong('${song.id}')" class="active-scale text-slate-500 hover:text-red-400 bg-slate-900/50 w-6 h-6 rounded-full flex items-center justify-center transition shrink-0 ml-1"><i class="fa-solid fa-trash text-[10px]"></i></button>` : '';
 
                     const reqBtnClass = isRequestedByMe 
                         ? 'bg-gradient-to-r from-pink-500 to-orange-400 text-white shadow-md shadow-orange-500/40 border-none' 
@@ -697,7 +779,10 @@
                                     </span>
                                     ${tagsHtml}
                                 </div>
-                                ${deleteBtnHtml}
+                                <div class="flex items-center">
+                                    ${editBtnHtml}
+                                    ${deleteBtnHtml}
+                                </div>
                             </div>
                             
                             <div class="flex justify-between items-end mb-2">
