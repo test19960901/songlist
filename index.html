@@ -214,14 +214,14 @@
         // ★ここに控えておいた firebaseConfig の中身を貼り付けてください★
         // =========================================================================
         const firebaseConfig = {
-  apiKey: "AIzaSyDMISzXc08qCEEcUybBAiHanC2KFekM9Hc",
-  authDomain: "songlist-4e2db.firebaseapp.com",
-  projectId: "songlist-4e2db",
-  storageBucket: "songlist-4e2db.firebasestorage.app",
-  messagingSenderId: "514651704919",
-  appId: "1:514651704919:web:b19403ea49a181e612dd12",
-  measurementId: "G-L5HLRS15Q1"
-};
+            apiKey: "AIzaSyDMISzXc08qCEEcUybBAiHanC2KFekM9Hc",
+            authDomain: "songlist-4e2db.firebaseapp.com",
+            projectId: "songlist-4e2db",
+            storageBucket: "songlist-4e2db.firebasestorage.app",
+            messagingSenderId: "514651704919",
+            appId: "1:514651704919:web:b19403ea49a181e612dd12",
+            measurementId: "G-L5HLRS15Q1"
+        };
 
         // Firebase初期化（変数名を fbApp に変更して競合を解消）
         const fbApp = firebase.initializeApp(firebaseConfig);
@@ -550,15 +550,18 @@
                 
                 try {
                     if (likedIndex === -1) {
-                        await songRef.update({ likes: firebase.firestore.FieldValue.increment(1) });
                         this.myActions.likes.push(id);
+                        this.saveMyActions();
+                        await songRef.update({ likes: firebase.firestore.FieldValue.increment(1) });
                     } else {
-                        await songRef.update({ likes: firebase.firestore.FieldValue.increment(-1) });
                         this.myActions.likes.splice(likedIndex, 1);
+                        this.saveMyActions();
+                        await songRef.update({ likes: firebase.firestore.FieldValue.increment(-1) });
                     }
-                    this.saveMyActions();
+                    this.render();
                 } catch(error) {
                     console.error("いいねエラー:", error);
+                    alert("いいねの反映に失敗しました。");
                 }
             }
 
@@ -568,15 +571,18 @@
                 
                 try {
                     if (reqIndex === -1) {
-                        await songRef.update({ requestCount: firebase.firestore.FieldValue.increment(1) });
                         this.myActions.requests.push(id);
+                        this.saveMyActions();
+                        await songRef.update({ requestCount: firebase.firestore.FieldValue.increment(1) });
                     } else {
-                        await songRef.update({ requestCount: firebase.firestore.FieldValue.increment(-1) });
                         this.myActions.requests.splice(reqIndex, 1);
+                        this.saveMyActions();
+                        await songRef.update({ requestCount: firebase.firestore.FieldValue.increment(-1) });
                     }
-                    this.saveMyActions();
+                    this.render();
                 } catch(error) {
                     console.error("リクエストエラー:", error);
+                    alert("リクエストの反映に失敗しました。");
                 }
             }
 
